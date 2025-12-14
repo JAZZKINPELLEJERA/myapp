@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "42894006122",
+    "project_id": "my-tindahance-7216e",
+    "storage_bucket": "my-tindahance-7216e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:42894006122:android:308be810204591ea6b7713",
+        "android_client_info": {
+          "package_name": "com.example.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_U6WT5bLDgMkqYUssSWM87ejCy4lR0YQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
