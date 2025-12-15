@@ -38,7 +38,7 @@ class _SignupScreenState extends State<SignupScreen> {
           _ownerNameController.text,
         );
         if (user != null && mounted) {
-          context.go('/home');
+          context.go('/main');
         }
       } on FirebaseAuthException catch (e) {
         if (e.code == 'email-already-in-use') {

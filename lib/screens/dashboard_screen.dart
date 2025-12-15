@@ -1,252 +1,240 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final Function(int) navigateToTab;
-
   const DashboardScreen({super.key, required this.navigateToTab});
 
-  Stream<double> get TodaysSales {
-    final now = DateTime.now();
-    final startOfToday = Timestamp.fromDate(DateTime(now.year, now.month, now.day));
-    final endOfToday = Timestamp.fromDate(DateTime(now.year, now.month, now.day, 23, 59, 59));
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
 
-    return FirebaseFirestore.instance
-        .collection('transactions')
-        .where('dateTime', isGreaterThanOrEqualTo: startOfToday)
-        .where('dateTime', isLessThanOrEqualTo: endOfToday)
-        .snapshots()
-        .map((snapshot) {
-      double total = 0.0;
-      for (final doc in snapshot.docs) {
-        total += doc['amount'] as double;
-      }
-      return total;
-    });
-  }
-
-  Stream<double> get TotalCredit {
-    return FirebaseFirestore.instance.collection('credits').snapshots().map((snapshot) {
-      double total = 0.0;
-      for (final doc in snapshot.docs) {
-        total += doc['amount'] as double;
-      }
-      return total;
-    });
-  }
-
-  Stream<List<DocumentSnapshot>> get LowStockProducts {
-    return FirebaseFirestore.instance
-        .collection('products')
-        .where('stock', isLessThan: 10)
-        .orderBy('stock')
-        .snapshots()
-        .map((snapshot) => snapshot.docs);
-  }
+class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final reportId = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
     return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          _buildTodaysSalesCard(),
-          const SizedBox(height: 16),
-          _buildTotalCreditCard(),
-          const SizedBox(height: 24),
-          const Text(
-            'Quick Actions',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)),
-          ),
-          const SizedBox(height: 12),
-          _buildQuickActionButtons(context),
-          const SizedBox(height: 24),
-          _buildLowStockSection(),
-        ],
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('daily_reports').doc(reportId).snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final reportData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+
+          final double totalSales = (reportData['totalSales'] as num?)?.toDouble() ?? 0.0;
+          final int totalTransactions = (reportData['totalTransactions'] as num?)?.toInt() ?? 0;
+          final Map<String, int> productSales = (reportData['productSales'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(k, v as int));
+
+          final sortedProducts = productSales.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
+          final topProducts = Map.fromEntries(sortedProducts.take(5));
+
+          return RefreshIndicator(
+            onRefresh: () async { 
+              setState(() {}); 
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 30),
+                  _buildSalesSummary(totalSales, totalTransactions),
+                  const SizedBox(height: 30),
+                  _buildTopProducts(topProducts),
+                  const SizedBox(height: 30),
+                  _buildLowStockAlert(),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildTodaysSalesCard() {
-    return Card(
-      elevation: 4.0,
-      shadowColor: const Color(0xFF1ABC9C).withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Today\'s Sales',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)),
-            ),
-            const SizedBox(height: 10),
-            StreamBuilder<double>(
-              stream: TodaysSales,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.hasError) {
-                  return const Text(
-                    '₱0.00',
-                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF1ABC9C)),
-                  );
-                }
-                final totalSales = snapshot.data!;
-                return Text(
-                  '₱${NumberFormat('#,##0.00', 'en_US').format(totalSales)}',
-                  style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF1ABC9C)),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTotalCreditCard() {
-    return Card(
-      elevation: 4.0,
-      shadowColor: Colors.orange.withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Total Outstanding Credit',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)),
-            ),
-            const SizedBox(height: 10),
-            StreamBuilder<double>(
-              stream: TotalCredit,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.hasError) {
-                  return Text(
-                    '₱0.00',
-                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.orange.shade700),
-                  );
-                }
-                final totalCredit = snapshot.data!;
-                return Text(
-                  '₱${NumberFormat('#,##0.00', 'en_US').format(totalCredit)}',
-                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.orange.shade700),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionButtons(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _quickActionButton(context, icon: Icons.add_shopping_cart, label: 'New Sale', onTap: () => navigateToTab(1)),
-        _quickActionButton(context, icon: Icons.add_circle, label: 'New Product', onTap: () => navigateToTab(2)),
+        Text(
+          'Welcome Back!',
+          style: GoogleFonts.poppins(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2C3E50),
+          ),
+        ),
+        Text(
+          'Here\'s your sales overview for today.',
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            color: Colors.grey[600],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _quickActionButton(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Icon(icon, size: 40, color: const Color(0xFF1ABC9C)),
+  Widget _buildSalesSummary(double totalSales, int transactionCount) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text('Today\'s Sales Summary', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2C3E50))),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _summaryItem('₱${NumberFormat('#,##0.00').format(totalSales)}', 'Total Revenue', Colors.blue),
+              _summaryItem(transactionCount.toString(), 'Transactions', Colors.teal),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLowStockSection() {
-    return Card(
-      elevation: 4.0,
-      shadowColor: Colors.red.withOpacity(0.2),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Low on Stock',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)),
+  Widget _summaryItem(String value, String label, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTopProducts(Map<String, int> topProducts) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('⭐ Top Selling Products', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2C3E50))),
+          const SizedBox(height: 15),
+          if (topProducts.isEmpty)
+            const Center(child: Text('No sales recorded yet.', style: TextStyle(fontSize: 16, color: Colors.grey)))
+          else
+            ...topProducts.entries.map((entry) => _productRankItem(entry.key, entry.value)).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _productRankItem(String name, int quantity) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-            const SizedBox(height: 10),
-            StreamBuilder<List<DocumentSnapshot>>(
-              stream: LowStockProducts,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty || snapshot.hasError) {
-                  return const Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text(
-                        'All products are well-stocked!',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
+          ),
+          Text(
+            '$quantity sold',
+            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildLowStockAlert() {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(15.0),
+        border: Border.all(color: Colors.red.shade200, width: 1.5)
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 24),
+              const SizedBox(width: 10),
+              Text('Low Stock Alerts', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('products').where('stock', isLessThanOrEqualTo: 10).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+              final lowStockProducts = snapshot.data!.docs;
+
+              if (lowStockProducts.isEmpty) {
+                return const Text('All products have sufficient stock!', style: TextStyle(fontSize: 16));
+              }
+
+              return Column(
+                children: lowStockProducts.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(data['name'], style: const TextStyle(fontSize: 16)),
+                        Text('Only ${data['stock']} left', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
+                      ],
                     ),
                   );
-                }
-                final lowStockProducts = snapshot.data!;
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: lowStockProducts.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final product = lowStockProducts[index];
-                    final productName = product['name'] as String;
-                    final stock = product['stock'] as int;
-                    return ListTile(
-                      title: Text(productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: Text(
-                        '$stock left',
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
+                }).toList(),
+              );
+            },
+          )
+        ],
       ),
     );
   }

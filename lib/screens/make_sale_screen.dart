@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 // Models
 class Product {
@@ -240,7 +241,7 @@ class _MakeSaleScreenState extends State<MakeSaleScreen> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
 
-            void _showQuantityInputDialog(CartItem item) {
+            void showQuantityInputDialog(CartItem item) {
               final quantityController = TextEditingController(text: item.quantity.toString());
               String? errorText;
 
@@ -290,7 +291,7 @@ class _MakeSaleScreenState extends State<MakeSaleScreen> {
               );
             }
 
-            void _updateQuantity(CartItem item, int change) {
+            void updateQuantity(CartItem item, int change) {
               setModalState(() {
                 final newQuantity = item.quantity + change;
                 if (newQuantity > 0 && newQuantity <= item.product.stock) {
@@ -300,7 +301,7 @@ class _MakeSaleScreenState extends State<MakeSaleScreen> {
               setState(() {}); // Update main screen FAB
             }
 
-            void _removeItem(int index) {
+            void removeItem(int index) {
               setModalState(() {
                 _cart.removeAt(index);
               });
@@ -347,10 +348,10 @@ class _MakeSaleScreenState extends State<MakeSaleScreen> {
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 28), onPressed: () => _updateQuantity(item, -1)),
+                                        IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 28), onPressed: () => updateQuantity(item, -1)),
                                         const SizedBox(width: 8),
                                         InkWell(
-                                          onTap: () => _showQuantityInputDialog(item),
+                                          onTap: () => showQuantityInputDialog(item),
                                           child: Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                               decoration: BoxDecoration(
@@ -361,12 +362,12 @@ class _MakeSaleScreenState extends State<MakeSaleScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        IconButton(icon: const Icon(Icons.add_circle_outline, color: Color(0xFF1ABC9C), size: 28), onPressed: () => _updateQuantity(item, 1)),
+                                        IconButton(icon: const Icon(Icons.add_circle_outline, color: Color(0xFF1ABC9C), size: 28), onPressed: () => updateQuantity(item, 1)),
                                       ],
                                     ),
                                     leading: IconButton(
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 28),
-                                      onPressed: () => _removeItem(index),
+                                      onPressed: () => removeItem(index),
                                     ),
                                   );
                                 },
@@ -688,49 +689,100 @@ Widget _buildReceiptRow(String title, String amount, {bool isBold = false, doubl
   Future<void> _finalizeSale(String paymentMethod, {String? customerName, double? cashReceived}) async {
     if (_cart.isEmpty) return;
 
-    final batch = FirebaseFirestore.instance.batch();
+    final firestore = FirebaseFirestore.instance;
+    final reportId = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final dailyReportRef = firestore.collection('daily_reports').doc(reportId);
 
-    final transactionRef = FirebaseFirestore.instance.collection('transactions').doc();
-    batch.set(transactionRef, {
-      'dateTime': Timestamp.now(),
-      'amount': _totalAmount,
-      'paymentMethod': paymentMethod,
-      'customerName': customerName,
-      'items': _cart.map((item) => {
-        'name': item.product.name,
-        'quantity': item.quantity,
-        'price': item.product.price,
-      }).toList(),
-    });
+    try {
+      await firestore.runTransaction((transaction) async {
+        // 1. Read the current daily report
+        final reportSnapshot = await transaction.get(dailyReportRef);
 
-    for (var item in _cart) {
-      final productRef = FirebaseFirestore.instance.collection('products').doc(item.product.id);
-      batch.update(productRef, {'stock': FieldValue.increment(-item.quantity)});
-    }
+        // Initialize new values from the cart
+        double newTotalSales = _totalAmount;
+        int newTotalTransactions = 1;
+        Map<String, int> newProductSales = { for (var item in _cart) item.product.name: item.quantity };
 
-    if (paymentMethod == 'Utang' && customerName != null) {
-      final creditQuery = await FirebaseFirestore.instance.collection('credits').where('name', isEqualTo: customerName).limit(1).get();
-      if (creditQuery.docs.isNotEmpty) {
-        final creditDocRef = creditQuery.docs.first.reference;
-        batch.update(creditDocRef, {'amount': FieldValue.increment(_totalAmount)});
-      } else {
-        final newCreditRef = FirebaseFirestore.instance.collection('credits').doc();
-        batch.set(newCreditRef, {
-          'name': customerName,
+        if (reportSnapshot.exists) {
+          // If the report exists, get existing values and add the new ones
+          final existingData = reportSnapshot.data() as Map<String, dynamic>;
+          final existingTotalSales = (existingData['totalSales'] as num?)?.toDouble() ?? 0.0;
+          final existingTotalTransactions = (existingData['totalTransactions'] as num?)?.toInt() ?? 0;
+          final existingProductSales = (existingData['productSales'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(k, v as int));
+          
+          newTotalSales += existingTotalSales;
+          newTotalTransactions += existingTotalTransactions;
+
+          newProductSales.forEach((productName, quantity) {
+            existingProductSales[productName] = (existingProductSales[productName] ?? 0) + quantity;
+          });
+          newProductSales = existingProductSales;
+        }
+
+        // 2. Create the data for the new/updated report
+        final reportData = {
+          'totalSales': newTotalSales,
+          'totalTransactions': newTotalTransactions,
+          'productSales': newProductSales,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        };
+
+        // 3. Set the updated daily report
+        transaction.set(dailyReportRef, reportData);
+
+        // 4. Record the permanent transaction
+        final transactionRef = firestore.collection('transactions').doc();
+        transaction.set(transactionRef, {
+          'dateTime': Timestamp.now(),
           'amount': _totalAmount,
-          'date': Timestamp.now(),
+          'paymentMethod': paymentMethod,
+          'customerName': customerName,
+          'items': _cart.map((item) => {
+            'name': item.product.name,
+            'quantity': item.quantity,
+            'price': item.product.price,
+          }).toList(),
         });
+
+        // 5. Update product stock for each item in the cart
+        for (var item in _cart) {
+          final productRef = firestore.collection('products').doc(item.product.id);
+          transaction.update(productRef, {'stock': FieldValue.increment(-item.quantity)});
+        }
+
+        // 6. Handle Utang (Credit)
+        if (paymentMethod == 'Utang' && customerName != null) {
+          // Note: Querying inside a transaction is generally discouraged.
+          // This part is kept as is but for larger scale apps should be refactored.
+          final creditQuery = await firestore.collection('credits').where('name', isEqualTo: customerName).limit(1).get();
+          if (creditQuery.docs.isNotEmpty) {
+            final creditDocRef = creditQuery.docs.first.reference;
+            transaction.update(creditDocRef, {'amount': FieldValue.increment(_totalAmount)});
+          } else {
+            final newCreditRef = firestore.collection('credits').doc();
+            transaction.set(newCreditRef, {
+              'name': customerName,
+              'amount': _totalAmount,
+              'date': Timestamp.now(),
+            });
+          }
+        }
+      });
+
+      // 7. Show receipt/confirmation after the transaction is successful
+      if (paymentMethod == 'Cash' && cashReceived != null) {
+        _showReceiptDialog(cashReceived);
+      } else if (paymentMethod == 'Utang') {
+        _clearCart();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Utang recorded successfully!')),
+        );
       }
-    }
-
-    await batch.commit();
-
-    if (paymentMethod == 'Cash' && cashReceived != null) {
-      _showReceiptDialog(cashReceived);
-    } else if (paymentMethod == 'Utang') {
-      _clearCart();
+      
+    } catch (e) {
+      // Handle any errors from the transaction
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Utang recorded successfully!')),
+        SnackBar(content: Text('Error finalizing sale: $e')),
       );
     }
   }

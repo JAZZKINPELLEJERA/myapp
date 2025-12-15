@@ -142,25 +142,23 @@ class TransactionHistoryScreen extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 0),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[700],
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red[700],
                 ),
+                icon: const Icon(Icons.delete_sweep),
+                label: const Text('Clear All History'),
+                onPressed: () {
+                  _showConfirmationDialog(
+                    context,
+                    title: 'Clear All History?',
+                    content: 'This will permanently delete all transaction records and restore product stocks and credit balances. This action cannot be undone.',
+                    onConfirm: () => _clearAllTransactions(context),
+                  );
+                },
               ),
-              icon: const Icon(Icons.delete_sweep),
-              label: const Text('Clear All History', style: TextStyle(fontSize: 16)),
-              onPressed: () {
-                _showConfirmationDialog(
-                  context,
-                  title: 'Clear All History?',
-                  content: 'This will permanently delete all transaction records and restore product stocks and credit balances. This action cannot be undone.',
-                  onConfirm: () => _clearAllTransactions(context),
-                );
-              },
             ),
           ),
           Expanded(
