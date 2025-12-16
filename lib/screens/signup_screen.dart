@@ -1,9 +1,9 @@
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:myapp/services/auth_service.dart';
+import 'package:tindahance/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:tindahance/widgets/sari_sari_background.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -63,104 +63,105 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.teal[400],
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            child: Container(
-              padding: const EdgeInsets.all(24.0),
-              margin: const EdgeInsets.symmetric(horizontal: 24.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10.0,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Create Your Account',
-                      style: GoogleFonts.poppins(
-                        fontSize: 22.0,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal[400],
-                      ),
-                    ),
-                    const SizedBox(height: 24.0),
-                    if (_errorMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 14),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    _buildTextField(
-                      controller: _storeNameController,
-                      labelText: 'Store Name',
-                      prefixIcon: Icons.store_outlined,
-                      validator: (value) =>
-                          value!.isEmpty ? 'Please enter your store name' : null,
-                    ),
-                    const SizedBox(height: 16.0),
-                    _buildTextField(
-                      controller: _ownerNameController,
-                      labelText: 'Owner Name',
-                      prefixIcon: Icons.person_outline,
-                      validator: (value) =>
-                          value!.isEmpty ? 'Please enter the owner\'s name' : null,
-                    ),
-                    const SizedBox(height: 16.0),
-                    _buildEmailField(),
-                    const SizedBox(height: 16.0),
-                    _buildPasswordField(),
-                    const SizedBox(height: 16.0),
-                    _buildConfirmPasswordField(),
-                    const SizedBox(height: 24.0),
-                    _isLoading
-                        ? const CircularProgressIndicator()
-                        : ElevatedButton(
-                            onPressed: _signup,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.teal[400],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 16.0),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                'Sign up',
-                                style: TextStyle(color: Colors.white, fontSize: 16.0),
-                              ),
-                            ),
-                          ),
-                    const SizedBox(height: 16.0),
-                    GestureDetector(
-                      onTap: () => context.go('/'),
-                      child: RichText(
-                        text: TextSpan(
-                          text: 'Already have an account? ',
-                          style: const TextStyle(color: Colors.black87, fontFamily: 'Poppins'),
-                          children: [
-                            TextSpan(
-                              text: 'Log in',
-                              style: TextStyle(color: Colors.teal[400], fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
+      body: SariSariStoreBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.all(24.0),
+                margin: const EdgeInsets.symmetric(horizontal: 24.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(25), // Use withAlpha for opacity
+                      blurRadius: 10.0,
+                      offset: const Offset(0, 5),
                     ),
                   ],
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Create Your Account',
+                        style: GoogleFonts.poppins(
+                          fontSize: 22.0,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal[400],
+                        ),
+                      ),
+                      const SizedBox(height: 24.0),
+                      if (_errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: Colors.red, fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      _buildTextField(
+                        controller: _storeNameController,
+                        labelText: 'Store Name',
+                        prefixIcon: Icons.store_outlined,
+                        validator: (value) =>
+                            value!.isEmpty ? 'Please enter your store name' : null,
+                      ),
+                      const SizedBox(height: 16.0),
+                      _buildTextField(
+                        controller: _ownerNameController,
+                        labelText: 'Owner Name',
+                        prefixIcon: Icons.person_outline,
+                        validator: (value) =>
+                            value!.isEmpty ? 'Please enter the owner\'s name' : null,
+                      ),
+                      const SizedBox(height: 16.0),
+                      _buildEmailField(),
+                      const SizedBox(height: 16.0),
+                      _buildPasswordField(),
+                      const SizedBox(height: 16.0),
+                      _buildConfirmPasswordField(),
+                      const SizedBox(height: 24.0),
+                      _isLoading
+                          ? const CircularProgressIndicator()
+                          : ElevatedButton(
+                              onPressed: _signup,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal[400],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'Sign up',
+                                  style: TextStyle(color: Colors.white, fontSize: 16.0),
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 16.0),
+                      GestureDetector(
+                        onTap: () => context.go('/'),
+                        child: RichText(
+                          text: TextSpan(
+                            text: 'Already have an account? ',
+                            style: const TextStyle(color: Colors.black87, fontFamily: 'Poppins'),
+                            children: [
+                              TextSpan(
+                                text: 'Log in',
+                                style: TextStyle(color: Colors.teal[400], fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

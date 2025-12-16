@@ -1,6 +1,6 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:myapp/models/product.dart';
+import 'package:tindahance/models/product.dart';
 
 class ProductService {
   final CollectionReference _productsCollection = FirebaseFirestore.instance.collection('products');

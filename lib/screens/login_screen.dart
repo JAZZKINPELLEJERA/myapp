@@ -1,10 +1,10 @@
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:myapp/services/auth_service.dart';
+import 'package:tindahance/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tindahance/widgets/sari_sari_background.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -57,6 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (user != null) {
           final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('isLoggedIn', true); // Save login state
           if (_rememberMe) {
             await prefs.setString('rememberedEmail', _emailController.text);
           } else {
@@ -87,88 +88,89 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.teal[400],
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            child: Container(
-              padding: const EdgeInsets.all(24.0),
-              margin: const EdgeInsets.symmetric(horizontal: 24.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10.0,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'TINDAHANCE',
-                      style: GoogleFonts.poppins(
-                        fontSize: 24.0,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal[400],
-                      ),
-                    ),
-                    const SizedBox(height: 24.0),
-                    if (_errorMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 14),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    _buildEmailField(),
-                    const SizedBox(height: 16.0),
-                    _buildPasswordField(),
-                    const SizedBox(height: 16.0),
-                    _buildRememberMeCheckbox(),
-                    const SizedBox(height: 24.0),
-                    _isLoading
-                        ? const CircularProgressIndicator()
-                        : ElevatedButton(
-                            onPressed: _login,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.teal[400],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 16.0),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                'Log in',
-                                style: TextStyle(color: Colors.white, fontSize: 16.0),
-                              ),
-                            ),
-                          ),
-                    const SizedBox(height: 16.0),
-                    GestureDetector(
-                      onTap: () => context.go('/signup'),
-                      child: RichText(
-                        text: TextSpan(
-                          text: 'Don\'t have an account? ',
-                          style: const TextStyle(color: Colors.black87, fontFamily: 'Poppins'),
-                          children: [
-                            TextSpan(
-                              text: 'Sign up',
-                              style: TextStyle(color: Colors.teal[400], fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
+      body: SariSariStoreBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.all(24.0),
+                margin: const EdgeInsets.symmetric(horizontal: 24.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(25), // Use withAlpha for opacity
+                      blurRadius: 10.0,
+                      offset: const Offset(0, 5),
                     ),
                   ],
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'TINDAHANCE',
+                        style: GoogleFonts.poppins(
+                          fontSize: 24.0,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal[400],
+                        ),
+                      ),
+                      const SizedBox(height: 24.0),
+                      if (_errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: Colors.red, fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      _buildEmailField(),
+                      const SizedBox(height: 16.0),
+                      _buildPasswordField(),
+                      const SizedBox(height: 16.0),
+                      _buildRememberMeCheckbox(),
+                      const SizedBox(height: 24.0),
+                      _isLoading
+                          ? const CircularProgressIndicator()
+                          : ElevatedButton(
+                              onPressed: _login,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal[400],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'Log in',
+                                  style: TextStyle(color: Colors.white, fontSize: 16.0),
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 16.0),
+                      GestureDetector(
+                        onTap: () => context.go('/signup'),
+                        child: RichText(
+                          text: TextSpan(
+                            text: 'Don\'t have an account? ',
+                            style: const TextStyle(color: Colors.black87, fontFamily: 'Poppins'),
+                            children: [
+                              TextSpan(
+                                text: 'Sign up',
+                                style: TextStyle(color: Colors.teal[400], fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

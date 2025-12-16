@@ -1,16 +1,17 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth
 import 'package:intl/intl.dart';
 
 class CreditScreen extends StatefulWidget {
   const CreditScreen({super.key});
 
   @override
-  _CreditScreenState createState() => _CreditScreenState();
+  CreditScreenState createState() => CreditScreenState();
 }
 
-class _CreditScreenState extends State<CreditScreen> {
+class CreditScreenState extends State<CreditScreen> {
+  final User? _user = FirebaseAuth.instance.currentUser; // Get current user
   String _sortOrder = 'Highest to Lowest';
   final TextEditingController _searchController = TextEditingController();
   String _searchTerm = '';
@@ -117,29 +118,35 @@ class _CreditScreenState extends State<CreditScreen> {
                   ),
                   child: const Text('Confirm Payment', style: TextStyle(fontSize: 16)),
                   onPressed: () async {
+                    if (_user == null) return;
                     final paidAmount = double.tryParse(amountController.text);
                     if (paidAmount == null || paidAmount <= 0) {
                       setDialogState(() => errorMessage = 'Please enter a valid amount.');
                       return;
                     }
 
+                    final navigator = Navigator.of(context);
+                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
                     final originalAmount = (creditData['amount'] as num).toDouble();
 
                     try {
+                      final creditCollection = FirebaseFirestore.instance.collection('users').doc(_user.uid).collection('credits');
                       if (paidAmount < originalAmount) {
-                        // Partial Payment
-                        await FirebaseFirestore.instance.collection('credits').doc(credit.id).update({'amount': FieldValue.increment(-paidAmount)});
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Partial payment of ₱${paidAmount.toStringAsFixed(2)} received.')));
+                        await creditCollection.doc(credit.id).update({'amount': FieldValue.increment(-paidAmount)});
+                        if (!mounted) return;
+                        navigator.pop();
+                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Partial payment of ₱${paidAmount.toStringAsFixed(2)} received.')));
                       } else {
-                        // Full Payment or Overpayment
                         final change = paidAmount - originalAmount;
-                        await FirebaseFirestore.instance.collection('credits').doc(credit.id).delete();
-                        Navigator.of(context).pop();
+                        await creditCollection.doc(credit.id).delete();
+                        if (!mounted) return;
+                        navigator.pop();
                         _showPaymentResultDialog(context: this.context, originalAmount: originalAmount, paidAmount: paidAmount, change: change);
                       }
                     } catch (e) {
-                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error processing payment: $e')));
+                      if (!mounted) return;
+                       scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error processing payment: $e')));
                     }
                   },
                 ),
@@ -153,6 +160,11 @@ class _CreditScreenState extends State<CreditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_user == null) {
+      return const Scaffold(
+        body: Center(child: Text("Please log in to view credits.")),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
@@ -200,8 +212,7 @@ class _CreditScreenState extends State<CreditScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
         border: Border.all(color: Colors.grey[300]!),
-         boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), spreadRadius: 1, blurRadius: 10, offset: const Offset(0, 3))],
-      ),
+         boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), spreadRadius: 1, blurRadius: 10, offset: const Offset(0, 3))]),
       child: PopupMenuButton<String>(
         icon: Icon(Icons.filter_list, color: Colors.grey[900]),
         onSelected: (String newValue) => setState(() => _sortOrder = newValue),
@@ -220,7 +231,7 @@ class _CreditScreenState extends State<CreditScreen> {
   }
 
   Widget _buildCreditList() {
-    Query query = FirebaseFirestore.instance.collection('credits');
+    Query query = FirebaseFirestore.instance.collection('users').doc(_user!.uid).collection('credits');
 
      if (_searchTerm.isNotEmpty) {
       query = query.where('name', isGreaterThanOrEqualTo: _searchTerm).where('name', isLessThanOrEqualTo: '$_searchTerm\uf8ff');
@@ -267,14 +278,13 @@ class _CreditScreenState extends State<CreditScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       elevation: 4.0,
-      shadowColor: Colors.black.withOpacity(0.1),
+      shadowColor: Colors.black.withAlpha(25),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFFFEFAE0),
           borderRadius: BorderRadius.circular(15.0),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.15), spreadRadius: 1, blurRadius: 10, offset: const Offset(0, 5))],
-        ),
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(38), spreadRadius: 1, blurRadius: 10, offset: const Offset(0, 5))]),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
@@ -286,7 +296,7 @@ class _CreditScreenState extends State<CreditScreen> {
                   children: [
                     Text(creditData['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.black87), overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 8),
-                    Text('₱${(creditData['amount'] as num).toStringAsFixed(2)} – $formattedDate', style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+                    Text('₱${(creditData['amount'] as num).toStringAsFixed(2)} – $formattedDate', style: TextStyle(fontSize: 16, color: Colors.grey[800])),
                   ],
                 ),
               ),

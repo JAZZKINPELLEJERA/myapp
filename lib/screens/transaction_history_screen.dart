@@ -1,6 +1,6 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
 class Transaction {
@@ -21,14 +21,14 @@ class Transaction {
   });
 
   factory Transaction.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>;
     return Transaction(
       id: doc.id,
       dateTime: (data['dateTime'] as Timestamp).toDate(),
       amount: (data['amount'] as num).toDouble(),
       paymentMethod: data['paymentMethod'] ?? '',
-      customerName: data['customerName'],
-      items: List<Map<String, dynamic>>.from(data['items'] ?? []),
+      customerName: data['customerName'] as String?,
+      items: List<Map<String, dynamic>>.from(data['items'] as List? ?? []),
     );
   }
 }
@@ -36,7 +36,66 @@ class Transaction {
 class TransactionHistoryScreen extends StatelessWidget {
   const TransactionHistoryScreen({super.key});
 
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(body: Center(child: Text("Please log in to view transaction history.")));
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: Colors.red[700]),
+                icon: const Icon(Icons.delete_sweep),
+                label: const Text('Clear All History'),
+                onPressed: () => _showConfirmationDialog(
+                  context,
+                  user: user,
+                  title: 'Clear All History?',
+                  content: 'This will permanently delete all transaction records and restore product stocks and credit balances. This action cannot be undone.',
+                  onConfirm: () => _clearAllTransactions(context, user),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(user.uid).collection('transactions').orderBy('dateTime', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No transactions found.', style: TextStyle(fontSize: 18, color: Colors.grey)));
+                }
+
+                final transactions = snapshot.data!.docs.map((doc) => Transaction.fromFirestore(doc)).toList();
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(12.0),
+                  itemCount: transactions.length,
+                  itemBuilder: (context, index) {
+                    return TransactionCard(transaction: transactions[index], user: user);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showConfirmationDialog(BuildContext context, {
+    required User user,
     required String title,
     required String content,
     required VoidCallback onConfirm,
@@ -60,19 +119,13 @@ class TransactionHistoryScreen extends StatelessWidget {
           actionsAlignment: MainAxisAlignment.center,
           actions: <Widget>[
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[600],
-                foregroundColor: Colors.white,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[600], foregroundColor: Colors.white),
               child: const Text('Cancel'),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             const SizedBox(width: 10),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[700],
-                foregroundColor: Colors.white,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
               child: const Text('Confirm'),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
@@ -85,40 +138,41 @@ class TransactionHistoryScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _clearAllTransactions(BuildContext context) async {
+  Future<void> _clearAllTransactions(BuildContext context, User user) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
-      final transactionsSnapshot = await FirebaseFirestore.instance.collection('transactions').get();
+      final userTransactionsRef = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('transactions');
+      final transactionsSnapshot = await userTransactionsRef.get();
+
       if (transactionsSnapshot.docs.isEmpty) {
         scaffoldMessenger.showSnackBar(const SnackBar(content: Text('No transactions to clear.')));
         return;
       }
 
       final batch = FirebaseFirestore.instance.batch();
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
       for (final doc in transactionsSnapshot.docs) {
         final transaction = Transaction.fromFirestore(doc);
-        await _addTransactionUpdatesToBatch(batch, transaction);
+        await _addTransactionUpdatesToBatch(userRef, batch, transaction);
         batch.delete(doc.reference);
       }
 
       await batch.commit();
 
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('All transaction history has been cleared.')),
-      );
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('All transaction history has been cleared.')));
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('An error occurred while clearing history: $e')),
-      );
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('An error occurred while clearing history: $e')));
     }
   }
 
-  Future<void> _addTransactionUpdatesToBatch(WriteBatch batch, Transaction transaction) async {
+  Future<void> _addTransactionUpdatesToBatch(DocumentReference userRef, WriteBatch batch, Transaction transaction) async {
     for (final item in transaction.items) {
-      final productName = item['name'];
-      final quantity = item['quantity'];
-      final productQuery = await FirebaseFirestore.instance.collection('products').where('name', isEqualTo: productName).limit(1).get();
+      final productName = item['name'] as String?;
+      final quantity = item['quantity'] as int?;
+      if (productName == null || quantity == null) continue;
+
+      final productQuery = await userRef.collection('products').where('name', isEqualTo: productName).limit(1).get();
       if (productQuery.docs.isNotEmpty) {
         final productDocRef = productQuery.docs.first.reference;
         batch.update(productDocRef, {'stock': FieldValue.increment(quantity)});
@@ -126,178 +180,36 @@ class TransactionHistoryScreen extends StatelessWidget {
     }
 
     if (transaction.paymentMethod == 'Utang' && transaction.customerName != null) {
-      final creditQuery = await FirebaseFirestore.instance.collection('credits').where('name', isEqualTo: transaction.customerName).limit(1).get();
+      final creditQuery = await userRef.collection('credits').where('name', isEqualTo: transaction.customerName).limit(1).get();
       if (creditQuery.docs.isNotEmpty) {
         final creditDocRef = creditQuery.docs.first.reference;
         batch.update(creditDocRef, {'amount': FieldValue.increment(-transaction.amount)});
       }
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 0),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.red[700],
-                ),
-                icon: const Icon(Icons.delete_sweep),
-                label: const Text('Clear All History'),
-                onPressed: () {
-                  _showConfirmationDialog(
-                    context,
-                    title: 'Clear All History?',
-                    content: 'This will permanently delete all transaction records and restore product stocks and credit balances. This action cannot be undone.',
-                    onConfirm: () => _clearAllTransactions(context),
-                  );
-                },
-              ),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('transactions').orderBy('dateTime', descending: true).snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text('No transactions found.', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  );
-                }
-
-                final transactions = snapshot.data!.docs.map((doc) => Transaction.fromFirestore(doc)).toList();
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(12.0),
-                  itemCount: transactions.length,
-                  itemBuilder: (context, index) {
-                    return TransactionCard(transaction: transactions[index]);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
 class TransactionCard extends StatefulWidget {
   final Transaction transaction;
+  final User user;
 
-  const TransactionCard({super.key, required this.transaction});
+  const TransactionCard({super.key, required this.transaction, required this.user});
 
   @override
-  _TransactionCardState createState() => _TransactionCardState();
+  TransactionCardState createState() => TransactionCardState();
 }
 
-class _TransactionCardState extends State<TransactionCard> {
+class TransactionCardState extends State<TransactionCard> {
   bool _isExpanded = false;
-
-  Future<void> _deleteTransaction() async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    try {
-      final batch = FirebaseFirestore.instance.batch();
-      final transactionRef = FirebaseFirestore.instance.collection('transactions').doc(widget.transaction.id);
-
-      await _addTransactionUpdatesToBatch(batch, widget.transaction);
-
-      batch.delete(transactionRef);
-
-      await batch.commit();
-
-      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Transaction deleted successfully.')));
-    } catch (e) {
-      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error deleting transaction: $e')));
-    }
-  }
-
-  Future<void> _addTransactionUpdatesToBatch(WriteBatch batch, Transaction transaction) async {
-    for (final item in transaction.items) {
-      final productName = item['name'];
-      final quantity = item['quantity'];
-      final productQuery = await FirebaseFirestore.instance.collection('products').where('name', isEqualTo: productName).limit(1).get();
-      if (productQuery.docs.isNotEmpty) {
-        final productDocRef = productQuery.docs.first.reference;
-        batch.update(productDocRef, {'stock': FieldValue.increment(quantity)});
-      }
-    }
-
-    if (transaction.paymentMethod == 'Utang' && transaction.customerName != null) {
-      final creditQuery = await FirebaseFirestore.instance.collection('credits').where('name', isEqualTo: transaction.customerName).limit(1).get();
-      if (creditQuery.docs.isNotEmpty) {
-        final creditDocRef = creditQuery.docs.first.reference;
-        batch.update(creditDocRef, {'amount': FieldValue.increment(-transaction.amount)});
-      }
-    }
-  }
-
-  Future<void> _showDeleteConfirmationDialog() async {
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Center(
-            child: Column(
-              children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.red[700], size: 40),
-                const SizedBox(height: 16),
-                const Text('Delete Transaction?', style: TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          content: const Text(
-            'This will restore stock and update credit if applicable. This action cannot be undone.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16),
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: <Widget>[
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[600],
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            const SizedBox(width: 10),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[700],
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Delete'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _deleteTransaction();
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    final Color paymentColor = widget.transaction.paymentMethod == 'Cash' ? const Color(0xFF1ABC9C) : Colors.orange.shade700;
+    final paymentColor = widget.transaction.paymentMethod == 'Cash' ? const Color(0xFF1ABC9C) : Colors.orange.shade700;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       elevation: 3.0,
-      shadowColor: paymentColor.withOpacity(0.3),
+      shadowColor: paymentColor.withAlpha(76),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15.0),
         side: BorderSide(color: paymentColor, width: 1.5),
@@ -324,11 +236,7 @@ class _TransactionCardState extends State<TransactionCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                formattedDate,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                overflow: TextOverflow.ellipsis,
-              ),
+              Text(formattedDate, style: TextStyle(fontSize: 13, color: Colors.grey[600]), overflow: TextOverflow.ellipsis),
               const SizedBox(height: 4),
               if (widget.transaction.customerName != null)
                 RichText(
@@ -342,7 +250,7 @@ class _TransactionCardState extends State<TransactionCard> {
                   ),
                 ),
               const SizedBox(height: 4),
-               Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   '₱${NumberFormat('#,##0.00').format(widget.transaction.amount)}',
@@ -353,10 +261,7 @@ class _TransactionCardState extends State<TransactionCard> {
           ),
         ),
         const SizedBox(width: 10),
-        Text(
-          widget.transaction.paymentMethod,
-          style: TextStyle(fontSize: 14, color: paymentColor, fontWeight: FontWeight.bold),
-        ),
+        Text(widget.transaction.paymentMethod, style: TextStyle(fontSize: 14, color: paymentColor, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -394,5 +299,84 @@ class _TransactionCardState extends State<TransactionCard> {
         ],
       ),
     );
+  }
+
+  Future<void> _showDeleteConfirmationDialog() async {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Center(
+            child: Column(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red[700], size: 40),
+                const SizedBox(height: 16),
+                const Text('Delete Transaction?', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          content: const Text('This will restore stock and update credit if applicable. This action cannot be undone.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: <Widget>[
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[600], foregroundColor: Colors.white),
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+              child: const Text('Delete'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _deleteTransaction();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteTransaction() async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      final userRef = FirebaseFirestore.instance.collection('users').doc(widget.user.uid);
+      final transactionRef = userRef.collection('transactions').doc(widget.transaction.id);
+
+      await _addTransactionUpdatesToBatch(userRef, batch, widget.transaction);
+
+      batch.delete(transactionRef);
+
+      await batch.commit();
+
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Transaction deleted successfully.')));
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error deleting transaction: $e')));
+    }
+  }
+
+  Future<void> _addTransactionUpdatesToBatch(DocumentReference userRef, WriteBatch batch, Transaction transaction) async {
+    for (final item in transaction.items) {
+      final productName = item['name'] as String?;
+      final quantity = item['quantity'] as int?;
+      if (productName == null || quantity == null) continue;
+
+      final productQuery = await userRef.collection('products').where('name', isEqualTo: productName).limit(1).get();
+      if (productQuery.docs.isNotEmpty) {
+        final productDocRef = productQuery.docs.first.reference;
+        batch.update(productDocRef, {'stock': FieldValue.increment(quantity)});
+      }
+    }
+
+    if (transaction.paymentMethod == 'Utang' && transaction.customerName != null) {
+      final creditQuery = await userRef.collection('credits').where('name', isEqualTo: transaction.customerName).limit(1).get();
+      if (creditQuery.docs.isNotEmpty) {
+        final creditDocRef = creditQuery.docs.first.reference;
+        batch.update(creditDocRef, {'amount': FieldValue.increment(-transaction.amount)});
+      }
+    }
   }
 }

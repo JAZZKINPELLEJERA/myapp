@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -7,10 +8,10 @@ class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
   @override
-  _ReportsScreenState createState() => _ReportsScreenState();
+  ReportsScreenState createState() => ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
+class ReportsScreenState extends State<ReportsScreen> {
   double _totalSales = 0.0;
   Map<String, int> _topSellingProducts = {};
   Map<String, int> _leastSellingProducts = {};
@@ -19,19 +20,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchReportData();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _fetchReportData(user);
+    }
   }
 
-  Future<void> _fetchReportData() async {
+  Future<void> _fetchReportData(User user) async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
     final reportId = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
     try {
       final results = await Future.wait([
-        FirebaseFirestore.instance.collection('products').get(),
-        FirebaseFirestore.instance.collection('daily_reports').doc(reportId).get(),
+        userRef.collection('products').get(),
+        userRef.collection('daily_reports').doc(reportId).get(),
       ]);
 
       if (!mounted) return;
@@ -67,7 +72,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _leastSellingProducts = {for (var name in unsoldProductNames) name: 0};
         _isLoading = false;
       });
-
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -77,7 +81,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  Future<void> _showResetConfirmationDialog() async {
+  Future<void> _showResetConfirmationDialog(User user) async {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -111,7 +115,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: const Text('Confirm & Delete'),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _resetReportData();
+                _resetReportData(user);
               },
             ),
           ],
@@ -120,14 +124,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Future<void> _resetReportData() async {
+  Future<void> _resetReportData(User user) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     if (!scaffoldMessenger.mounted) return;
 
     final reportId = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
-      final reportDoc = FirebaseFirestore.instance.collection('daily_reports').doc(reportId);
+      final reportDoc = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('daily_reports').doc(reportId);
       await reportDoc.delete();
 
       scaffoldMessenger.showSnackBar(const SnackBar(
@@ -136,9 +140,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         behavior: SnackBarBehavior.floating,
       ));
 
-      // After deleting, refresh the data to show the empty state
-      await _fetchReportData();
-
+      await _fetchReportData(user);
     } catch (e) {
       if (scaffoldMessenger.mounted) {
         scaffoldMessenger.showSnackBar(SnackBar(content: Text('An error occurred while deleting data: $e')));
@@ -148,31 +150,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: Text("Please log in to view reports.")),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F8),
       appBar: AppBar(
         title: Text('Today\'s Report', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF2C3E50))),
         backgroundColor: Colors.white,
         elevation: 1.0,
-        shadowColor: Colors.black.withOpacity(0.1),
+        shadowColor: Colors.black.withAlpha(25),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Data',
-            onPressed: _fetchReportData,
-            color: Colors.blue[700],
-          ),
-          IconButton(
-            icon: Icon(Icons.delete_forever, color: Colors.red[700]),
-            tooltip: 'Permanently Delete Today\'s Data',
-            onPressed: _showResetConfirmationDialog,
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: TextButton.icon(
+              icon: Icon(Icons.delete_forever, color: Colors.red[700]),
+              label: Text('Reset', style: TextStyle(color: Colors.red[700])),
+              onPressed: () => _showResetConfirmationDialog(user),
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+              ),
+            ),
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _fetchReportData,
+              onRefresh: () => _fetchReportData(user),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16.0),
@@ -200,7 +210,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         borderRadius: BorderRadius.circular(20.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
+            color: Colors.blue.withAlpha(76),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -213,7 +223,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             Text(
               'Total Sales Today',
-              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.9)),
+              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white.withAlpha(230)),
             ),
             const SizedBox(height: 8),
             Text(
@@ -231,9 +241,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20.0),
+        border: Border.all(color: Colors.blueGrey.shade100, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
+            color: Colors.black.withAlpha(18),
             blurRadius: 20,
             offset: const Offset(0, 5),
           ),
@@ -250,7 +261,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(height: 20),
             _buildProductList('⭐ Top Selling', topSelling, Colors.green.shade600),
-            const SizedBox(height: 28),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20.0),
+              child: Divider(color: Colors.grey.shade200, thickness: 1),
+            ),
             _buildProductList('🚫 Not Yet Sold', leastSelling, Colors.orange.shade800, showZeroAsNotSold: true),
           ],
         ),
@@ -285,9 +299,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final entry = entries[index];
-              final String salesText = (showZeroAsNotSold && entry.value == 0) 
-                  ? 'Not sold yet' 
-                  : '${entry.value} sold';
+              final salesText = (showZeroAsNotSold && entry.value == 0) ? 'Not sold yet' : '${entry.value} sold';
 
               return Row(
                 children: [
@@ -296,7 +308,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     height: 28,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: indicatorColor.withOpacity(0.1),
+                      color: indicatorColor.withAlpha(25),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(

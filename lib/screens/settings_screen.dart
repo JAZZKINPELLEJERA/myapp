@@ -1,15 +1,14 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:myapp/services/auth_service.dart';
+import 'package:tindahance/services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  _SettingsScreenState createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
@@ -44,24 +43,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveChanges() async {
-    if (_currentUser != null) {
-      try {
-        await FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).update({
-          'storeName': _storeNameController.text,
-          'ownerName': _ownerNameController.text,
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Changes saved successfully!'), backgroundColor: Colors.green),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error saving changes: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
+    if (_currentUser == null) return;
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).update({
+        'storeName': _storeNameController.text,
+        'ownerName': _ownerNameController.text,
+      });
+
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Changes saved successfully!'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Error saving changes: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -108,8 +106,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-
 
   void _showChangePasswordDialog() {
     final formKey = GlobalKey<FormState>();
@@ -179,17 +175,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
+                      final navigator = Navigator.of(context);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+
                       try {
                         await _authService.changePassword(
                           currentPasswordController.text,
                           newPasswordController.text,
                         );
-                        if (mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Password changed successfully!'), backgroundColor: Colors.green),
-                          );
-                        }
+                        navigator.pop();
+                        scaffoldMessenger.showSnackBar(
+                          const SnackBar(content: Text('Password changed successfully!'), backgroundColor: Colors.green),
+                        );
                       } on FirebaseAuthException catch (e) {
                         setDialogState(() {
                           if (e.code == 'wrong-password') {
@@ -216,6 +213,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showDeleteAccountDialog() {
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -238,16 +238,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               try {
                 await _authService.deleteAccount();
-                if (mounted) {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                }
+                navigator.popUntil((route) => route.isFirst);
               } catch (e) {
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error deleting account: $e'), backgroundColor: Colors.red),
-                  );
-                }
+                navigator.pop();
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(content: Text('Error deleting account: $e'), backgroundColor: Colors.red),
+                );
               }
             },
             child: Text('Delete', style: GoogleFonts.poppins(color: Colors.white)),
@@ -261,7 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[100],
       body: ListView(
         padding: const EdgeInsets.all(20.0),
         children: [
@@ -378,7 +374,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSettingsOptionsList() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'App Settings',
+          style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
         _buildSettingsListItem(
           title: 'About',
           icon: Icons.info_outline,
@@ -407,18 +409,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Color? textColor,
     required VoidCallback onTap,
   }) {
-     return ListTile(
-      leading: Icon(icon, color: iconColor ?? Colors.grey[800]),
-      title: Text(
-        title,
-        style: GoogleFonts.poppins(
-          fontSize: 16,
-          color: textColor ?? Colors.black,
+    bool isDelete = title == 'Delete Account';
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      elevation: 2.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        leading: CircleAvatar(
+          backgroundColor: isDelete ? Colors.red.withOpacity(0.1) : Colors.teal.withOpacity(0.1),
+          child: Icon(icon, color: iconColor ?? (isDelete ? Colors.red : Colors.teal[400])),
         ),
-      ),
-      onTap: onTap,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
+        title: Text(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textColor ?? Colors.black87,
+          ),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -11,7 +12,12 @@ class AuthService {
       email: email,
       password: password,
     );
-    return result.user;
+    final User? user = result.user;
+    if (user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+    }
+    return user;
   }
 
   Future<User?> signUp(
@@ -36,12 +42,16 @@ class AuthService {
         'ownerName': ownerName,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
     }
 
     return user;
   }
 
   Future<void> signOut() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLoggedIn', false);
     await _auth.signOut();
   }
 
@@ -71,6 +81,8 @@ class AuthService {
       await _firestore.collection('users').doc(user.uid).delete();
       // Then delete the auth user
       await user.delete();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', false);
     }
   }
 }

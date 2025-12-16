@@ -1,34 +1,44 @@
-# TindahanCE Blueprint
+
+# Tindahance Blueprint
 
 ## Overview
 
-TindahanCE is a comprehensive point-of-sale (POS) and inventory management application designed for small retail businesses. It streamlines sales, tracks inventory, and provides valuable insights through sales reports, all within a user-friendly interface.
+Tindahance is a comprehensive point-of-sale (POS) and inventory management application designed for small retail businesses ("tindahan"). It helps owners track sales, manage product inventory, handle customer credit ("utang"), and view reports on business performance. The app is built with Flutter and Firebase, providing a real-time, cloud-based solution.
 
 ## Style, Design, and Features
 
-### Authentication
-- **Login/Signup:** Secure user authentication with email and password, including a "Remember Me" option.
-- **Modern UI:** A clean and modern interface with a teal-based color scheme, Poppins font, and intuitive form fields.
+### Architecture & Tech Stack
+- **Framework**: Flutter
+- **Backend & Database**: Firebase (Firestore, Firebase Auth)
+- **Routing**: `go_router` for declarative navigation.
+- **State Management**: Using `StatefulWidget` for local state and `provider` will be added for app-wide state like theme management.
+- **UI Design**: Material Design, with a plan to upgrade to Material 3 for a modern look and feel.
+- **Asynchronous Operations**: Uses `FutureBuilder` and `StreamBuilder` for interacting with Firebase services.
 
-### Core Features
-- **Dashboard:** A central hub providing an overview of key business metrics.
-- **Sales:** A dedicated screen for processing sales transactions.
-- **Product Management:** A screen to view, add, and manage products. Products are stored in and retrieved from Cloud Firestore.
-- **Credit Management:** A screen for tracking customer credit.
-- **Transaction History:** A detailed log of all sales and transactions.
-- **Reporting:** A section for generating sales and inventory reports.
-- **Settings:** A screen for configuring application settings.
+### Core Features Implemented
+- **Authentication**: User can sign up and log in using Firebase Authentication.
+- **Main Dashboard**: Displays a summary of the day's sales, total transactions, and top-selling products. It also includes a low-stock alert.
+- **Navigation**: A side drawer (`AppDrawer`) provides navigation to all major screens.
+- **Make a Sale**: A dedicated screen to search for products and add them to a shopping cart. It supports cash and credit ("utang") payments.
+- **Product Management**: A screen to view, add, edit, and delete products. Product details include name, price, and stock quantity.
+- **Credit (Utang) Management**: A screen to view and manage customer credit balances.
+- **Transaction History**: A screen that lists all past sales transactions.
+- **Reporting**: A screen to view daily and monthly sales reports.
 
-### Navigation
-- **Shell-based Architecture:** The app now uses a persistent "shell" that houses the main content, providing a smoother and more efficient navigation experience.
-- **App Drawer:** A consistent navigation drawer allows users to switch between different views within the main shell.
-- **Routing:** A simplified `go_router`-based navigation system directs users to the main shell after login.
+### Design Elements
+- **Color Scheme**: Primary color is a shade of teal (`#1ABC9C`).
+- **Typography**: Uses the 'Poppins' font via the `google_fonts` package for a clean and modern look.
+- **Icons**: Uses standard Material Design icons.
 
-## Current Task: Refactor Navigation
+## Current Plan
 
-### Plan
-1. **Identify the Issue:** The previous navigation model felt disjointed, with each tab acting as a separate, top-level destination.
-2. **Implement a Shell-based Architecture:** Create a new `MainScreen` to act as a persistent shell for the app's main content.
-3. **Refactor the App Drawer:** Modify the `AppDrawer` to work with the new `MainScreen`, allowing users to switch between views within the shell.
-4. **Update the Router:** Simplify the router to use the `MainScreen` as the primary route after login.
-5. **Update the Login Screen:** Change the login screen to navigate to the new `/main` route instead of `/dashboard`.
+The immediate goal is to refactor and enhance the application's foundation by improving the theming and state management structure.
+
+### Steps:
+1.  **Add `provider` package**: Introduce the `provider` package for state management, which is essential for managing the app's theme.
+2.  **Implement Material 3 Theming**:
+    -   Create a `ThemeProvider` class to manage the app's theme (light, dark, system).
+    -   Update `main.dart` to use `ChangeNotifierProvider` to make the `ThemeProvider` available throughout the app.
+    -   Define separate `lightTheme` and `darkTheme` using `ThemeData` with `useMaterial3: true` and `ColorScheme.fromSeed` for a modern, cohesive look.
+    -   Update the `MaterialApp` to use the themes from the `ThemeProvider`.
+3.  **Add Theme Toggle**: Add UI controls to the `SettingsScreen` to allow the user to toggle between light and dark themes.

@@ -1,15 +1,15 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
 
   @override
-  _ProductsScreenState createState() => _ProductsScreenState();
+  ProductsScreenState createState() => ProductsScreenState();
 }
 
-class _ProductsScreenState extends State<ProductsScreen> {
+class ProductsScreenState extends State<ProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchText = "";
 
@@ -38,21 +38,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  void _showAddProductModal() {
+  void _showAddProductModal(User user) {
     showDialog(
       context: context,
-      builder: (BuildContext context) => _AddProductDialog(onError: _showErrorSnackbar),
+      builder: (BuildContext context) => AddProductDialog(user: user, onError: _showErrorSnackbar),
     );
   }
 
-  void _showEditProductModal(String docId, Map<String, dynamic> product) {
+  void _showEditProductModal(User user, String docId, Map<String, dynamic> product) {
     showDialog(
       context: context,
-      builder: (BuildContext context) => _EditProductDialog(docId: docId, product: product, onError: _showErrorSnackbar),
+      builder: (BuildContext context) => EditProductDialog(user: user, docId: docId, product: product, onError: _showErrorSnackbar),
     );
   }
 
-  void _showDeleteConfirmationDialog(String docId, String productName) {
+  void _showDeleteConfirmationDialog(User user, String docId, String productName) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -68,7 +68,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
               child: const Text('Delete', style: TextStyle(color: Colors.white)),
               onPressed: () {
-                FirebaseFirestore.instance.collection('products').doc(docId).delete();
+                FirebaseFirestore.instance.collection('users').doc(user.uid).collection('products').doc(docId).delete();
                 Navigator.of(context).pop();
               },
             ),
@@ -80,17 +80,27 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text("Please log in to manage products."),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       body: Column(
         children: [
           _buildSearchBar(),
-          Expanded(child: _buildProductList()),
+          Expanded(child: _buildProductList(user)),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddProductModal,
-        backgroundColor: const Color(0xFF1ABC9C),
+        onPressed: () => _showAddProductModal(user),
+        backgroundColor: const Color(0xFF9575CD),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add Product', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
@@ -113,16 +123,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(30.0),
-            borderSide: const BorderSide(color: Colors.black, width: 1.5),
+            borderSide: const BorderSide(color: Color(0xFF9575CD), width: 2.0),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildProductList() {
+  Widget _buildProductList(User user) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('products').orderBy('name').snapshots(),
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).collection('products').orderBy('name').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -152,14 +162,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
           itemCount: filteredDocs.length,
           itemBuilder: (context, index) {
             var doc = filteredDocs[index];
-            return _buildProductCard(doc.data() as Map<String, dynamic>, doc.id);
+            return _buildProductCard(user, doc.data() as Map<String, dynamic>, doc.id);
           },
         );
       },
     );
   }
 
-  Widget _buildProductCard(Map<String, dynamic> product, String docId) {
+  Widget _buildProductCard(User user, Map<String, dynamic> product, String docId) {
     String name = product['name'] ?? 'No Name';
     double price = (product['price'] ?? 0.0).toDouble();
     int stock = (product['stock'] ?? 0).toInt();
@@ -170,7 +180,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       shadowColor: Colors.black26,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12.0),
-        side: const BorderSide(color: Color(0xFF1ABC9C), width: 1.5),
+        side: const BorderSide(color: Color(0xFF9575CD), width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -188,8 +198,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
             ),
             Row(
               children: [
-                IconButton(icon: const Icon(Icons.edit, color: Colors.blueAccent), onPressed: () => _showEditProductModal(docId, product)),
-                IconButton(icon: const Icon(Icons.delete, color: Colors.redAccent), onPressed: () => _showDeleteConfirmationDialog(docId, name)),
+                IconButton(icon: const Icon(Icons.edit, color: Colors.blueAccent), onPressed: () => _showEditProductModal(user, docId, product)),
+                IconButton(icon: const Icon(Icons.delete, color: Colors.redAccent), onPressed: () => _showDeleteConfirmationDialog(user, docId, name)),
               ],
             ),
           ],
@@ -199,16 +209,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 }
 
-// Stateful Dialog for Adding a Product
-class _AddProductDialog extends StatefulWidget {
+class AddProductDialog extends StatefulWidget {
+  final User user;
   final Function(String) onError;
-  const _AddProductDialog({required this.onError});
+  const AddProductDialog({super.key, required this.user, required this.onError});
 
   @override
-  __AddProductDialogState createState() => __AddProductDialogState();
+  AddProductDialogState createState() => AddProductDialogState();
 }
 
-class __AddProductDialogState extends State<_AddProductDialog> {
+class AddProductDialogState extends State<AddProductDialog> {
   final _formKey = GlobalKey<FormState>();
   final nameController = TextEditingController();
   final priceController = TextEditingController();
@@ -255,12 +265,12 @@ class __AddProductDialogState extends State<_AddProductDialog> {
         ),
       ),
       actions: <Widget>[
-        TextButton(child: const Text('Cancel', style: TextStyle(color: Color(0xFF1ABC9C))), onPressed: () => Navigator.of(context).pop()),
+        TextButton(child: const Text('Cancel', style: TextStyle(color: Color(0xFF9575CD))), onPressed: () => Navigator.of(context).pop()),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1ABC9C)), // Teal color
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9575CD)),
           onPressed: () {
             if (_formKey.currentState!.validate()) {
-              FirebaseFirestore.instance.collection('products').add({
+              FirebaseFirestore.instance.collection('users').doc(widget.user.uid).collection('products').add({
                 'name': nameController.text,
                 'price': double.parse(priceController.text),
                 'stock': int.parse(stockController.text),
@@ -275,19 +285,19 @@ class __AddProductDialogState extends State<_AddProductDialog> {
   }
 }
 
-// Stateful Dialog for Editing a Product
-class _EditProductDialog extends StatefulWidget {
+class EditProductDialog extends StatefulWidget {
+  final User user;
   final String docId;
   final Map<String, dynamic> product;
   final Function(String) onError;
 
-  const _EditProductDialog({required this.docId, required this.product, required this.onError});
+  const EditProductDialog({super.key, required this.user, required this.docId, required this.product, required this.onError});
 
   @override
-  __EditProductDialogState createState() => __EditProductDialogState();
+  EditProductDialogState createState() => EditProductDialogState();
 }
 
-class __EditProductDialogState extends State<_EditProductDialog> {
+class EditProductDialogState extends State<EditProductDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController nameController;
   late TextEditingController priceController;
@@ -313,13 +323,13 @@ class __EditProductDialogState extends State<_EditProductDialog> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
             child: const Text('Update', style: TextStyle(color: Colors.white)),
             onPressed: () {
-              FirebaseFirestore.instance.collection('products').doc(widget.docId).update({
+              FirebaseFirestore.instance.collection('users').doc(widget.user.uid).collection('products').doc(widget.docId).update({
                 'name': nameController.text,
                 'price': double.parse(priceController.text),
                 'stock': int.parse(stockController.text),
               });
-              Navigator.of(ctx).pop(); // Close confirmation dialog
-              Navigator.of(context).pop(); // Close edit dialog
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
             },
           ),
         ],
@@ -373,8 +383,8 @@ class __EditProductDialogState extends State<_EditProductDialog> {
           style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
           onPressed: () {
             bool hasChanged = nameController.text != widget.product['name'] ||
-                                priceController.text != widget.product['price'].toString() ||
-                                stockController.text != widget.product['stock'].toString();
+                priceController.text != widget.product['price'].toString() ||
+                stockController.text != widget.product['stock'].toString();
 
             if (!hasChanged) {
               widget.onError('No changes were made.');

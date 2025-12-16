@@ -1,34 +1,65 @@
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:myapp/services/auth_service.dart';
+import 'package:tindahance/services/auth_service.dart';
 
-class AppDrawer extends StatelessWidget {
+class AppDrawer extends StatefulWidget {
   final Function(int) onSelectItem;
+  final int selectedIndex;
 
-  const AppDrawer({super.key, required this.onSelectItem});
+  const AppDrawer(
+      {super.key, required this.onSelectItem, required this.selectedIndex});
+
+  @override
+  State<AppDrawer> createState() => AppDrawerState();
+}
+
+class AppDrawerState extends State<AppDrawer> {
+  final User? _user = FirebaseAuth.instance.currentUser;
+  final AuthService _authService = AuthService();
+  String? _storeName;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_user != null) {
+      _fetchStoreName();
+    }
+  }
+
+  Future<void> _fetchStoreName() async {
+    if (_user == null || !mounted) return;
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(_user.uid).get();
+      if (userDoc.exists && mounted) {
+        setState(() {
+          _storeName = userDoc.data()?['storeName'];
+        });
+      }
+    } catch (e) {
+      // Handle error appropriately, e.g., log it
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final authService = AuthService();
-
     return Drawer(
       child: Column(
         children: [
-          _buildHeader(user),
+          _buildHeader(_user),
           Expanded(
             child: _buildMenuList(context),
           ),
-          _buildFooter(context, authService),
+          _buildFooter(context, _authService),
         ],
       ),
     );
   }
 
   Widget _buildHeader(User? user) {
+    final storeName = _storeName ?? 'TindahanCE';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
@@ -45,7 +76,7 @@ class AppDrawer extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'TINDAHANCE',
+            storeName,
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -76,17 +107,27 @@ class AppDrawer extends StatelessWidget {
         _buildMenuItem(context, 'Transaction History', Icons.history_outlined, 4),
         _buildMenuItem(context, 'Reports', Icons.bar_chart_outlined, 5),
         const Divider(),
-        _buildMenuItem(context, 'Settings', Icons.settings_outlined, 6, isSettings: true),
+        _buildMenuItem(context, 'Settings', Icons.settings_outlined, 6),
       ],
     );
   }
 
-  Widget _buildMenuItem(BuildContext context, String title, IconData icon, int index, {bool isSettings = false}) {
+  Widget _buildMenuItem(BuildContext context, String title, IconData icon, int index) {
+    final isSelected = widget.selectedIndex == index;
     return ListTile(
-      leading: Icon(icon, color: Colors.black87),
-      title: Text(title, style: GoogleFonts.poppins(fontSize: 15)),
-      tileColor: isSettings ? Colors.teal[50] : null,
-      onTap: () => onSelectItem(index),
+      leading: Icon(icon, color: isSelected ? Theme.of(context).primaryColor : Colors.black87),
+      title: Text(
+        title,
+        style: GoogleFonts.poppins(
+          fontSize: 15,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Theme.of(context).primaryColor : Colors.black87,
+        ),
+      ),
+      tileColor: isSelected ? Colors.teal[50] : null,
+      onTap: () {
+        widget.onSelectItem(index);
+      },
     );
   }
 
